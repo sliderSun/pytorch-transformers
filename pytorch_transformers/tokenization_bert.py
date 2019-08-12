@@ -22,7 +22,7 @@ import os
 import unicodedata
 from io import open
 
-from .tokenization_utils import PreTrainedTokenizer, clean_up_tokenization
+from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +67,10 @@ def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
     with open(vocab_file, "r", encoding="utf-8") as reader:
-        tokens = reader.read().splitlines()
+        tokens = reader.readlines()
     for index, token in enumerate(tokens):
+        token = token.rstrip('\n')
         vocab[token] = index
-        index += 1
     return vocab
 
 
@@ -86,7 +86,7 @@ def whitespace_tokenize(text):
 class BertTokenizer(PreTrainedTokenizer):
     r"""
     Constructs a BertTokenizer.
-    :class:`~pytorch_pretrained_bert.BertTokenizer` runs end-to-end tokenization: punctuation splitting + wordpiece
+    :class:`~pytorch_transformers.BertTokenizer` runs end-to-end tokenization: punctuation splitting + wordpiece
 
     Args:
         vocab_file: Path to a one-wordpiece-per-line vocabulary file
@@ -119,7 +119,7 @@ class BertTokenizer(PreTrainedTokenizer):
                 Only has an effect when do_basic_tokenize=True
             **tokenize_chinese_chars**: (`optional`) boolean (default True)
                 Whether to tokenize Chinese characters.
-                This should likely be desactivated for Japanese:
+                This should likely be deactivated for Japanese:
                 see: https://github.com/huggingface/pytorch-pretrained-BERT/issues/328
         """
         super(BertTokenizer, self).__init__(unk_token=unk_token, sep_token=sep_token,
@@ -214,7 +214,7 @@ class BasicTokenizer(object):
                 List of token not to split.
             **tokenize_chinese_chars**: (`optional`) boolean (default True)
                 Whether to tokenize Chinese characters.
-                This should likely be desactivated for Japanese:
+                This should likely be deactivated for Japanese:
                 see: https://github.com/huggingface/pytorch-pretrained-BERT/issues/328
         """
         if never_split is None:

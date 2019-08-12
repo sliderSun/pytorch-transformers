@@ -2,7 +2,7 @@
 
 [![CircleCI](https://circleci.com/gh/huggingface/pytorch-transformers.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-transformers)
 
-PyTorch-Transformers (formely known as `pytorch-pretrained-bert`) is a library of state-of-the-art pre-trained models for Natural Language Processing (NLP).
+PyTorch-Transformers (formerly known as `pytorch-pretrained-bert`) is a library of state-of-the-art pre-trained models for Natural Language Processing (NLP).
 
 The library currently contains PyTorch implementations, pre-trained model weights, usage scripts and conversion utilities for the following models:
 
@@ -18,14 +18,14 @@ These implementations have been tested on several datasets (see the example scri
 | Section | Description |
 |-|-|
 | [Installation](#installation) | How to install the package |
-| [Quick tour: Usage](#quick-tour-usage) | Tokenizers & models usage: Bert and GPT-2 |
-| [Quick tour: Fine-tuning/usage scripts](#quick-tour-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
+| [Quick tour: Usage](#quick-tour) | Tokenizers & models usage: Bert and GPT-2 |
+| [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-pytorch-transformers) | Migrating your code from pytorch-pretrained-bert to pytorch-transformers |
 | [Documentation](https://huggingface.co/pytorch-transformers/) | Full API documentation and more |
 
 ## Installation
 
-This repo is tested on Python 2.7 and 3.5+ (examples are tested only on python 3.5+) and PyTorch 0.4.1 to 1.1.0
+This repo is tested on Python 2.7 and 3.5+ (examples are tested only on python 3.5+) and PyTorch 1.0.0+
 
 ### With pip
 
@@ -56,9 +56,19 @@ python -m pytest -sv ./pytorch_transformers/tests/
 python -m pytest -sv ./examples/
 ```
 
+### Do you want to run a Transformer model on a mobile device?
+
+You should check out our [`swift-coreml-transformers`](https://github.com/huggingface/swift-coreml-transformers) repo.
+
+It contains an example of a conversion script from a Pytorch trained Transformer model (here, `GPT-2`) to a CoreML model that runs on iOS devices.
+
+At some point in the future, you'll be able to seamlessly move from pre-training or fine-tuning models in PyTorch to productizing them in CoreML,
+or prototype a model or an app in CoreML then research its hyperparameters or architecture from PyTorch. Super exciting!
+
+
 ## Quick tour
 
-Let's do a very quick overview of PyTorch-Transformers. Detailled examples for each model architecture (Bert, GPT, GPT-2, Transformer-XL, XLNet and XLM) can be found in the [full documentation](https://huggingface.co/pytorch-transformers/).
+Let's do a very quick overview of PyTorch-Transformers. Detailed examples for each model architecture (Bert, GPT, GPT-2, Transformer-XL, XLNet and XLM) can be found in the [full documentation](https://huggingface.co/pytorch-transformers/).
 
 ```python
 import torch
@@ -82,7 +92,8 @@ for model_class, tokenizer_class, pretrained_weights in MODELS:
 
     # Encode text
     input_ids = torch.tensor([tokenizer.encode("Here is some text to encode")])
-    last_hidden_states = model(input_ids)[0]  # Models outputs are now tuples
+    with torch.no_grad():
+        last_hidden_states = model(input_ids)[0]  # Models outputs are now tuples
 
 # Each architecture is provided with several class for fine-tuning on down-stream tasks, e.g.
 BERT_MODEL_CLASSES = [BertModel, BertForPreTraining, BertForMaskedLM, BertForNextSentencePrediction,
@@ -194,7 +205,7 @@ python ./examples/run_glue.py \
     --warmup_steps=120
 ```
 
-On this machine we thus have a batch size of 32, please increase `gradient_accumulation_steps` to reach the same batch size if you have a smaller machine. These hyper-parameters should results in a Pearson correlation coefficient of `+0.917` on the development set.
+On this machine we thus have a batch size of 32, please increase `gradient_accumulation_steps` to reach the same batch size if you have a smaller machine. These hyper-parameters should result in a Pearson correlation coefficient of `+0.917` on the development set.
 
 #### Fine-tuning Bert model on the MRPC classification task
 
@@ -264,7 +275,7 @@ This is the model provided as `bert-large-uncased-whole-word-masking-finetuned-s
 ### `run_generation.py`: Text generation with GPT, GPT-2, Transformer-XL and XLNet
 
 A conditional generation script is also included to generate text from a prompt.
-The generation script include the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by by Aman Rusia to get high quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
+The generation script includes the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by by Aman Rusia to get high quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
 
 Here is how to run the script with the small version of OpenAI GPT-2 model:
 
@@ -283,7 +294,7 @@ Here is a quick summary of what you should take care of when migrating from `pyt
 
 The main breaking change when migrating from `pytorch-pretrained-bert` to `pytorch-transformers` is that the models forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
 
-The exact content of the tuples for each model are detailled in the models' docstrings and the [documentation](https://huggingface.co/pytorch-transformers/).
+The exact content of the tuples for each model are detailed in the models' docstrings and the [documentation](https://huggingface.co/pytorch-transformers/).
 
 In pretty much every case, you will be fine by taking the first element of the output as the output you previously used in `pytorch-pretrained-bert`.
 
@@ -303,7 +314,7 @@ loss = outputs[0]
 # In pytorch-transformers you can also have access to the logits:
 loss, logits = outputs[:2]
 
-# And even the attention weigths if you configure the model to output them (and other outputs too, see the docstrings and documentation)
+# And even the attention weights if you configure the model to output them (and other outputs too, see the docstrings and documentation)
 model = BertForSequenceClassification.from_pretrained('bert-base-uncased', output_attentions=True)
 outputs = model(input_ids, labels=labels)
 loss, logits, attentions = outputs
@@ -311,8 +322,11 @@ loss, logits, attentions = outputs
 
 ### Serialization
 
-Breaking change: Models are now set in evaluation mode by default when instantiated with the `from_pretrained()` method.
-To train them don't forget to set them back in training mode (`model.train()`) to activate the dropout modules.
+Breaking change in the `from_pretrained()`method:
+
+1. Models are now set in evaluation mode by default when instantiated with the `from_pretrained()` method. To train them don't forget to set them back in training mode (`model.train()`) to activate the dropout modules.
+
+2. The additional `*input` and `**kwargs` arguments supplied to the `from_pretrained()` method used to be directly passed to the underlying model's class `__init__()` method. They are now used to update the model configuration attribute instead which can break derived model classes build based on the previous `BertForSequenceClassification` examples. We are working on a way to mitigate this breaking change in [#866](https://github.com/huggingface/pytorch-transformers/pull/866) by forwarding the the model `__init__()` method (i) the provided positional arguments and (ii) the keyword arguments which do not match any configuratoin class attributes.
 
 Also, while not a breaking change, the serialization methods have been standardized and you probably should switch to the new method `save_pretrained(save_directory)` if you were using any other serialization method before.
 
@@ -341,8 +355,13 @@ tokenizer = BertTokenizer.from_pretrained('./my_saved_model_directory/')
 
 ### Optimizers: BertAdam & OpenAIAdam are now AdamW, schedules are standard PyTorch schedules
 
-The two optimizers previously included, `BertAdam` and `OpenAIAdam`, have been replaced by a single `AdamW` optimizer.
-The new optimizer `AdamW` matches PyTorch `Adam` optimizer API.
+The two optimizers previously included, `BertAdam` and `OpenAIAdam`, have been replaced by a single `AdamW` optimizer which has a few differences:
+
+- it only implements weights decay correction,
+- schedules are now externals (see below),
+- gradient clipping is now also external (see below).
+
+The new optimizer `AdamW` matches PyTorch `Adam` optimizer API and let you use standard PyTorch or apex methods for the schedule and clipping.
 
 The schedules are now standard [PyTorch learning rate schedulers](https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate) and not part of the optimizer anymore.
 
@@ -351,6 +370,7 @@ Here is a conversion examples from `BertAdam` with a linear warmup and decay sch
 ```python
 # Parameters:
 lr = 1e-3
+max_grad_norm = 1.0
 num_total_steps = 1000
 num_warmup_steps = 100
 warmup_proportion = float(num_warmup_steps) / float(num_total_steps)  # 0.1
@@ -370,8 +390,10 @@ scheduler = WarmupLinearSchedule(optimizer, warmup_steps=num_warmup_steps, t_tot
 for batch in train_data:
     loss = model(batch)
     loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)  # Gradient clipping is not in AdamW anymore (so you can use amp without issue)
     scheduler.step()
     optimizer.step()
+    optimizer.zero_grad()
 ```
 
 ## Citation
