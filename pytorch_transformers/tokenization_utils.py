@@ -180,9 +180,10 @@ class PreTrainedTokenizer(object):
 
     @classmethod
     def from_pretrained(cls, *inputs, **kwargs):
-        r""" Instantiate a :class:`~pytorch_transformers.PreTrainedTokenizer` (or a derived class) from a predefined tokenizer.
+        r"""
+        Instantiate a :class:`~pytorch_transformers.PreTrainedTokenizer` (or a derived class) from a predefined tokenizer.
 
-        Parameters:
+        Args:
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.: ``bert-base-uncased``.
@@ -191,6 +192,13 @@ class PreTrainedTokenizer(object):
 
             cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded predefined tokenizer vocabulary files should be cached if the standard cache should not be used.
+
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the vocabulary files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
 
             inputs: (`optional`) positional arguments: will be passed to the Tokenizer ``__init__`` method.
 
@@ -222,6 +230,8 @@ class PreTrainedTokenizer(object):
     @classmethod
     def _from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
         cache_dir = kwargs.pop('cache_dir', None)
+        force_download = kwargs.pop('force_download', False)
+        proxies = kwargs.pop('proxies', None)
 
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
@@ -282,8 +292,8 @@ class PreTrainedTokenizer(object):
                 if file_path is None:
                     resolved_vocab_files[file_id] = None
                 else:
-                    resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir)
-        except EnvironmentError:
+                    resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+        except EnvironmentError as e:
             if pretrained_model_name_or_path in s3_models:
                 logger.error("Couldn't reach server to download vocabulary.")
             else:
@@ -293,7 +303,7 @@ class PreTrainedTokenizer(object):
                     "at this path or url.".format(
                         pretrained_model_name_or_path, ', '.join(s3_models),
                         pretrained_model_name_or_path, str(vocab_files.keys())))
-            return None
+            raise e
 
         for file_id, file_path in vocab_files.items():
             if file_path == resolved_vocab_files[file_id]:
@@ -383,14 +393,15 @@ class PreTrainedTokenizer(object):
 
 
     def add_tokens(self, new_tokens):
-        """ Add a list of new tokens to the tokenizer class. If the new tokens are not in the
+        """
+        Add a list of new tokens to the tokenizer class. If the new tokens are not in the
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
 
-            Parameters:
-                new_tokens: list of string. Each string is a token to add. Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
+        Args:
+            new_tokens: list of string. Each string is a token to add. Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
 
-            Returns:
-                Number of tokens added to the vocabulary.
+        Returns:
+            Number of tokens added to the vocabulary.
 
         Examples::
 
@@ -422,17 +433,20 @@ class PreTrainedTokenizer(object):
 
 
     def add_special_tokens(self, special_tokens_dict):
-        """ Add a dictionary of special tokens (eos, pad, cls...) to the encoder and link them
-            to class attributes. If special tokens are NOT in the vocabulary, they are added
-            to it (indexed starting from the last index of the current vocabulary).
+        """
+        Add a dictionary of special tokens (eos, pad, cls...) to the encoder and link them
+        to class attributes. If special tokens are NOT in the vocabulary, they are added
+        to it (indexed starting from the last index of the current vocabulary).
 
-            Parameters:
-                special_tokens_dict: dict of string. Keys should be in the list of predefined special attributes: [``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``, ``mask_token``, ``additional_special_tokens``].
-                
-                    Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
+        Args:
+            special_tokens_dict: dict of string. Keys should be in the list of predefined special attributes:
+                [``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``, ``mask_token``,
+                ``additional_special_tokens``].
 
-            Returns:
-                Number of tokens added to the vocabulary.
+                Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
+
+        Returns:
+            Number of tokens added to the vocabulary.
 
         Examples::
 
@@ -472,15 +486,45 @@ class PreTrainedTokenizer(object):
 
             Take care of added tokens.
         """
+        def split_on_token(tok, text):
+            result = []
+            split_text = text.split(tok)
+            for i, sub_text in enumerate(split_text):
+                sub_text = sub_text.strip()
+                if i == 0 and not sub_text:
+                    result += [tok]
+                elif i == len(split_text) - 1:
+                    if sub_text:
+                        result += [sub_text]
+                    else:
+                        pass
+                else:
+                    if sub_text:
+                        result += [sub_text]
+                    result += [tok]
+            return result
+
         def split_on_tokens(tok_list, text):
             if not text:
                 return []
             if not tok_list:
                 return self._tokenize(text, **kwargs)
-            tok = tok_list[0]
-            split_text = text.split(tok)
-            return sum((split_on_tokens(tok_list[1:], sub_text.strip()) + [tok] \
-                        for sub_text in split_text), [])[:-1]
+
+            tokenized_text = []
+            text_list = [text]
+            for tok in tok_list:
+                tokenized_text = []
+                for sub_text in text_list:
+                    if sub_text not in self.added_tokens_encoder \
+                            and sub_text not in self.all_special_tokens:
+                        tokenized_text += split_on_token(tok, sub_text)
+                    else:
+                        tokenized_text += [sub_text]
+                text_list = tokenized_text
+
+            return sum((self._tokenize(token, **kwargs) if token not \
+                    in self.added_tokens_encoder and token not in self.all_special_tokens \
+                    else [token] for token in tokenized_text), [])
 
         added_tokens = list(self.added_tokens_encoder.keys()) + self.all_special_tokens
         tokenized_text = split_on_tokens(added_tokens, text)
@@ -519,14 +563,37 @@ class PreTrainedTokenizer(object):
     def _convert_token_to_id(self, token):
         raise NotImplementedError
 
-
-    def encode(self, text):
-        """ Converts a string in a sequence of ids (integer), using the tokenizer and vocabulary.
-        
-        Same doing ``self.convert_tokens_to_ids(self.tokenize(text))``.
+    def encode(self, text, text_pair=None, add_special_tokens=False):
         """
-        return self.convert_tokens_to_ids(self.tokenize(text))
+        Converts a string in a sequence of ids (integer), using the tokenizer and vocabulary.
+        
+        Same as doing ``self.convert_tokens_to_ids(self.tokenize(text))``.
 
+        Args:
+            text: The first sequence to be encoded.
+            text_pair: Optional second sequence to be encoded.
+            add_special_tokens: if set to ``True``, the sequences will be encoded with the special tokens relative
+                to their model.
+        """
+        if text_pair is None:
+            if add_special_tokens:
+                return self.add_special_tokens_single_sentence(self.convert_tokens_to_ids(self.tokenize(text)))
+            else:
+                return self.convert_tokens_to_ids(self.tokenize(text))
+
+        first_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text)]
+        second_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text_pair)]
+
+        if add_special_tokens:
+            return self.add_special_tokens_sentences_pair(first_sentence_tokens, second_sentence_tokens)
+        else:
+            return first_sentence_tokens, second_sentence_tokens
+
+    def add_special_tokens_single_sentence(self, token_ids):
+        raise NotImplementedError
+
+    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
+        raise NotImplementedError
 
     def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
         """ Converts a single index or a sequence of indices (integers) in a token "
@@ -561,16 +628,28 @@ class PreTrainedTokenizer(object):
         return ' '.join(self.convert_ids_to_tokens(tokens))
 
     def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
-        """ Converts a sequence of ids (integer) in a string, using the tokenizer and vocabulary
-            with options to remove special tokens and clean up tokenization spaces.
-
+        """
+        Converts a sequence of ids (integer) in a string, using the tokenizer and vocabulary
+        with options to remove special tokens and clean up tokenization spaces.
         Similar to doing ``self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))``.
         """
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
         text = self.convert_tokens_to_string(filtered_tokens)
-        if clean_up_tokenization_spaces:
-            text = self.clean_up_tokenization(text)
-        return text
+
+        if self.sep_token is not None and self.sep_token in text:
+            text = text.replace(self.cls_token, self.sep_token)
+            split_text = list(filter(lambda sentence: len(sentence) > 0, text.split(self.sep_token)))
+            if clean_up_tokenization_spaces:
+                clean_text = [self.clean_up_tokenization(text) for text in split_text]
+                return clean_text
+            else:
+                return split_text
+        else:
+            if clean_up_tokenization_spaces:
+                clean_text = self.clean_up_tokenization(text)
+                return clean_text
+            else:
+                return text
 
     @property
     def special_tokens_map(self):
@@ -602,7 +681,7 @@ class PreTrainedTokenizer(object):
             class attributes (cls_token, unk_token...).
         """
         all_toks = self.all_special_tokens
-        all_ids = list(self.convert_tokens_to_ids(t) for t in all_toks)
+        all_ids = list(self._convert_token_to_id(t) for t in all_toks)
         return all_ids
 
     @staticmethod
